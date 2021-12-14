@@ -3,13 +3,13 @@
 
 import numpy as np
 
-def gradient_value_guided_qmdct_modify(array, gradient, max_modifications, type='most', accuracy_direction='increase'):
+def gradient_value_guided_qmdct_modify(array, gradient, max_modifications, type='most', accuracy_direction='increase', neglect_sign=False):
   if isinstance(max_modifications, int):
     max_modifications = [max_modifications]
   if type == 'most':
     result = most_value_based_modify(array, gradient, max_modifications, accuracy_direction)
   elif type == 'least':
-    result = least_value_based_modify(array, gradient, max_modifications, accuracy_direction)
+    result = least_value_based_modify(array, gradient, max_modifications, accuracy_direction, neglect_sign)
 
   return result
 
@@ -42,12 +42,13 @@ def most_value_based_modify(array, gradient, max_modifications, accuracy_directi
     result[mm] = temp_array.reshape(num_array, height, width, 1)
   return result
 
-def least_value_based_modify(array, gradient, max_modifications, accuracy_direction='increase'):
+def least_value_based_modify(array, gradient, max_modifications, accuracy_direction='increase', neglect_sign=False):
   array, gradient = _preprocess(array, gradient, accuracy_direction)
 
   gradient[gradient == .0] = 100
   gradient[np.logical_or(array==0, abs(array) > 2)] = 100
-  gradient[np.sign(gradient)==np.sign(array)] = 100
+  if neglect_sign is False:
+    gradient[np.sign(gradient)==np.sign(array)] = 100
   num_array, height, width, _ = gradient.shape
   flattened_gradient = gradient.reshape(num_array, -1)
   flattened_index = np.argsort(abs(flattened_gradient), 1)

@@ -24,7 +24,7 @@ def _load_everything(model, model_path):
 def generate_and_test(model, criterion, model_path=None, criterion_path=None,
                       max_modifications=[100, 200, 500, 1000, 2000, 4000, 8000, 10000, 12000, 20000],
                       gradient_label=0, modified_label=0, accuracy_direction='increase',
-                      save_path='qmdct_gradient_value_based_result.csv', gradient_prefer_type='most'):
+                      save_path='qmdct_gradient_value_based_result.csv', gradient_prefer_type='most', neglect_sign=False):
   model_path = model_path if model_path else f'model_{model}.pth'
   criterion_path = criterion_path if criterion_path else f'model_{criterion}.pth'
   model, device, cover_array, batches, batch_size, len_files = _load_everything(model, model_path)
@@ -42,7 +42,7 @@ def generate_and_test(model, criterion, model_path=None, criterion_path=None,
     original_probs, grads = gradient.data_gradient(model, cover_array[start:end], T.LongTensor([gradient_label]*batch_size).to(device))
     modified_arrays = steganography.gradient_value_guided_qmdct_modify(cover_array[start:end], grads,
                                                                        max_modifications=max_modifications, type=gradient_prefer_type,
-                                                                       accuracy_direction=accuracy_direction)
+                                                                       accuracy_direction=accuracy_direction, neglect_sign=neglect_sign)
     for mm in modified_arrays.keys():
       result['modified'][mm] += list(criterion.get_probabilities(utils.transform(modified_arrays[mm], device), [modified_label]*batch_size))
 #      result['modifications'][mm] += list((modified_arrays[mm].reshape(batch_size, -1)!=cover_array[start:end].reshape(batch_size, -1)).sum(axis=1))
@@ -59,10 +59,10 @@ def generate_and_test(model, criterion, model_path=None, criterion_path=None,
 def test_gradient_value_guided_qmdct_modify(model='rhfcn', model_path='model_rhfcn.pth',
                                             max_modifications=[100, 200, 500, 1000, 2000, 4000, 8000, 10000, 12000, 20000],
                                             gradient_label=0, modified_label=0, accuracy_direction='increase',
-                                            save_path='qmdct_gradient_value_based_result.csv', gradient_prefer_type='most'):
+                                            save_path='qmdct_gradient_value_based_result.csv', gradient_prefer_type='most', neglect_sign=False):
   generate_and_test(model, model, model_path=model_path, criterion_path=model_path, max_modifications=max_modifications,
                     gradient_label=gradient_label, modified_label=modified_label, accuracy_direction=accuracy_direction,
-                    save_path=save_path, gradient_prefer_type=gradient_prefer_type)
+                    save_path=save_path, gradient_prefer_type=gradient_prefer_type, neglect_sign=neglect_sign)
 
 def test_two_models(generator_model='wasdn', criterion_model='rhfcn', save_path='blackbox.csv'):
   generate_and_test(generator_model, criterion_model, gradient_prefer_type='least', save_path=save_path)
@@ -129,4 +129,6 @@ if __name__ == '__main__':
 #  test_gradient_value_guided_qmdct_modify(model='rhfcn', model_path='model_rhfcn.pth', save_path='rhfcn_least.csv', gradient_prefer_type='least')
 #  test_gradient_value_guided_qmdct_modify(model='wasdn', model_path='model_wasdn.pth', save_path='wasdn_least.csv', gradient_prefer_type='least')
 #  test_fgsm_qmdct_modify()
-  test_two_models()
+#  test_two_models()
+  test_gradient_value_guided_qmdct_modify('wasdn', 'model_wasdn.pth', neglect_sign=True, save_path='wasdn_neglect.csv')
+  test_gradient_value_guided_qmdct_modify('wasdn', 'model_wasdn.pth', neglect_sign=False, save_path='wasdn_not_neglect.csv')
