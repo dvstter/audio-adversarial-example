@@ -3,15 +3,33 @@
 
 import numpy as np
 
+def norm(array):
+  result = np.array(array, dtype=np.float)
+  N = array.shape[0]
+  temp = array.reshape(N, -1)
+  _max = temp.max(1)
+  for i in range(N):
+    result[i] /= _max[i]
+  return result.reshape(array.shape)
+
+def multiple_gradients_value_guided_qmdct_modify(array, gradients, max_modifications, type='most', accuracy_direction='increase', neglect_sing=False, normalization=True):
+  if isinstance(max_modifications, int):
+    max_modifications = [max_modifications]
+  if normalization:
+    gradients = [norm(grads) for grads in gradients]
+  grad = sum(gradients) / len(gradients)
+  if type == 'most':
+    return most_value_based_modify(array, grad, max_modifications, accuracy_direction)
+  elif type == 'least':
+    return least_value_based_modify(array, grad, max_modifications, accuracy_direction, neglect_sign)
+
 def gradient_value_guided_qmdct_modify(array, gradient, max_modifications, type='most', accuracy_direction='increase', neglect_sign=False):
   if isinstance(max_modifications, int):
     max_modifications = [max_modifications]
   if type == 'most':
-    result = most_value_based_modify(array, gradient, max_modifications, accuracy_direction)
+    return most_value_based_modify(array, gradient, max_modifications, accuracy_direction)
   elif type == 'least':
-    result = least_value_based_modify(array, gradient, max_modifications, accuracy_direction, neglect_sign)
-
-  return result
+    return least_value_based_modify(array, gradient, max_modifications, accuracy_direction, neglect_sign)
 
 def _preprocess(array, gradient, accuracy_direction='increase'):
   array = np.array(array, dtype=np.float)

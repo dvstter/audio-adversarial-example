@@ -64,8 +64,10 @@ def test_gradient_value_guided_qmdct_modify(model='rhfcn', model_path='model_rhf
                     gradient_label=gradient_label, modified_label=modified_label, accuracy_direction=accuracy_direction,
                     save_path=save_path, gradient_prefer_type=gradient_prefer_type, neglect_sign=neglect_sign)
 
-def test_two_models(generator_model='wasdn', criterion_model='rhfcn', save_path='blackbox.csv'):
-  generate_and_test(generator_model, criterion_model, gradient_prefer_type='least', save_path=save_path)
+def test_different_models_gradient_value_guided_qmdct_modify(generator_model='wasdn', criterion_model='rhfcn',
+                                                             generator_model_path=None, criterion_model_path=None, save_path='blackbox.csv'):
+  generate_and_test(generator_model, criterion_model, model_path=generator_model_path, criterion_path=criterion_model_path,
+                    gradient_prefer_type='least', save_path=save_path)
 
 def test_gradient_sign_guided_qmdct_modify(model='rhfcn', model_path='model_rhfcn.pth'):
   model, device, cover_array, batches, batch_size, len_files = _load_everything(model, model_path)
@@ -129,6 +131,6 @@ if __name__ == '__main__':
 #  test_gradient_value_guided_qmdct_modify(model='rhfcn', model_path='model_rhfcn.pth', save_path='rhfcn_least.csv', gradient_prefer_type='least')
 #  test_gradient_value_guided_qmdct_modify(model='wasdn', model_path='model_wasdn.pth', save_path='wasdn_least.csv', gradient_prefer_type='least')
 #  test_fgsm_qmdct_modify()
-#  test_two_models()
-  test_gradient_value_guided_qmdct_modify('wasdn', 'model_wasdn.pth', neglect_sign=True, save_path='wasdn_neglect.csv')
-  test_gradient_value_guided_qmdct_modify('wasdn', 'model_wasdn.pth', neglect_sign=False, save_path='wasdn_not_neglect.csv')
+#  test_gradient_value_guided_qmdct_modify('wasdn', 'model_wasdn.pth', neglect_sign=True, save_path='wasdn_neglect.csv')
+#  test_gradient_value_guided_qmdct_modify('wasdn', 'model_wasdn.pth', neglect_sign=False, save_path='wasdn_not_neglect.csv')
+  test_different_models_gradient_value_guided_qmdct_modify('wasdn', 'wasdn', 'model_wasdn_local.pth', 'model_wasdn_remote.pth', save_path='two_wasdn.csv')
