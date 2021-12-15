@@ -5,8 +5,8 @@ import getpass
 import os
 
 def get_paths(birate='320', cover=True, stego=True, gradient=False):
-  if not birate in ['128', '320', 128, 320]:
-    raise ValueError('type must be 128 or 320')
+  if not birate in ['128', '320', 128, 320, 'test']:
+    raise ValueError('type must be 128, 320 or test')
   if (getpass.getuser()) == 'yanghanlin':
     cover_path = f'/Users/yanghanlin/Downloads/stego_analysis_data/Cover/{birate}/'
     stego_path = f'/Users/yanghanlin/Downloads/stego_analysis_data/Stego/ACS_B_{birate}_W_2_H_7_ER_10/'
@@ -15,6 +15,11 @@ def get_paths(birate='320', cover=True, stego=True, gradient=False):
     cover_path = f'/home/zhu/stego_analysis/Cover/{birate}/'
     stego_path = f'/home/zhu/stego_analysis/Stego/ACS_B_{birate}_W_2_H_7_ER_10/'
     gradient_path = f'/home/zhu/stego_analysis/Gradient/{birate}/'
+
+  if birate == 'test':
+    cover_path = '/home/zhu/stego_analysis/500_320/'
+    stego_path = '/home/zhu/stego_analysis/500_320_stego/'
+    gradient_path = '/home/zhu/stego_analysis/500_320_gradient'
 
   if gradient and not os.path.exists(gradient_path):
     os.makedirs(gradient_path)
