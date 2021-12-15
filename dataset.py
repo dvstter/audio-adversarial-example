@@ -10,9 +10,16 @@ class ToTensor:
     self.device = device
 
 class PairDataset:
-  def __init__(self, cover_path, stego_path, start_index=None, end_index=None, folds=10, batch_size=10, to_tensor=None):
+  def __init__(self, cover_path_or_files, stego_path_or_files, start_index=None, end_index=None, folds=10, batch_size=10, to_tensor=None):
     self._batch_size = batch_size
-    cover_files, stego_files = utils.get_files_list(cover_path)[start_index:end_index], utils.get_files_list(stego_path)[start_index:end_index]
+    if isinstance(cover_path_or_files, str):
+      cover_files= utils.get_files_list(cover_path_or_files)[start_index:end_index]
+    else:
+      cover_files = cover_path_or_files
+    if isinstance(stego_path_or_files, str):
+      stego_files = utils.get_files_list(stego_path_or_files)[start_index:end_index]
+    else:
+      stego_files = stego_path_or_files
     self._len = len(cover_files)
     if len(cover_files) != len(stego_files):
       raise ValueError('cover files should be paired with stego files.')

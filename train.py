@@ -47,11 +47,10 @@ def evaluation(model, data, labels, batch_size=500, progress=False):
 
   return correct, correct / num_data
 
-def cross_validation_train(model='wasdn', epochs=4, batch_size=10, save_path=None, smoothed_weight=0.3, exit_threhold=0.8):
-  cover_path, stego_path = config.get_paths(birate=320)
+def cross_validation_train(model, cover_files, stego_files, epochs=4, batch_size=10, save_path=None, smoothed_weight=0.3, exit_threhold=0.8):
   writer = tensorboard.SummaryWriter(f'runs/train_{utils.get_time()}')
   device = utils.auto_select_device()
-  dataset = PairDataset(cover_path, stego_path, folds=10, batch_size=batch_size, to_tensor=ToTensor(device))
+  dataset = PairDataset(cover_files, stego_files, folds=10, batch_size=batch_size, to_tensor=ToTensor(device))
 
   if model == 'wasdn':
     model = WASDN().to(device)
@@ -98,7 +97,10 @@ def cross_validation_train(model='wasdn', epochs=4, batch_size=10, save_path=Non
   writer.flush()
   writer.close()
 
-def train(model='rhfcn', epochs = 3, batch_size=8, train_size=0.9, save_path=None, seed=None):
+def __depreacted_train(model='rhfcn', epochs = 3, batch_size=8, train_size=0.9, save_path=None, seed=None):
+  """
+  This method has been deprecated.
+  """
   cover_path, stego_path = config.get_paths(birate=320)
 
   writer = tensorboard.SummaryWriter(f'runs/train_{utils.get_time()}')
@@ -190,5 +192,9 @@ def test(model='rhfcn', model_path='model_rhfcn.pth', birate=320, verbose=True):
   return correct1 + correct2, total_accuracy
 
 if __name__ == '__main__':
-  cross_validation_train(model='rhfcn', save_path='model_rhfcn.pth')
-  test(model='rhfcn', model_path='model_rhfcn.pth')
+  cover_path, stego_path = config.get_paths(birate=320)
+  cover_files, stego_files = utils.get_files_list(cover_path), utils.get_files_list(stego_path)
+  cross_validation_train('wasdn', cover_files[:5000], stego_files[:5000], save_path='model_wasdn_local.pth')
+  test(model='wasdn', model_path='model_wasdn_local.pth')
+  cross_validation_train('wasdn', cover_files[5000:], stego_files[5000:], save_path='model_wasdn_remote.pth')
+  test(model='wasdn', model_path='model_wasdn_remote.pth')
