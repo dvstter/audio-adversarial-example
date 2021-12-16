@@ -170,11 +170,11 @@ def transform(array, device=None):
     device = auto_select_device()
   if array.ndim != 4:
     raise ValueError('array\'s dimension must be 4 [B*H*W*C]')
-  tensor = T.FloatTensor(array).to(device)
+  tensor = T.FloatTensor(array)
   tensor = tensor.permute(0,3,1,2)
   tensor = QMDCTtoHPF(tensor)
   tensor = tensor[:, :, :200, :450]
-  return tensor
+  return tensor.to(device)
 
 def save_model(model, path=None):
   if not path:
