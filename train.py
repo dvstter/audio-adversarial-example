@@ -92,8 +92,8 @@ def cross_validation_train(model, cover_files, stego_files, epochs=4, batch_size
   except NestedBreakException:
     pass
 
-  print(f'model saved to {save_path}')
   utils.save_model(model, save_path)
+  print(f'model saved to {save_path}')
   writer.flush()
   writer.close()
 
@@ -181,13 +181,19 @@ def test(model='rhfcn', model_path='model_rhfcn.pth', birate=320, verbose=True):
 
   model = utils.load_model(model, model_path, device)
 
-  correct1, accuracy1 = evaluation(model, covers, [0]*len(cover_files), 500, progress=True) if len(cover_files) > 0 else (0, 0)
-  correct2, accuracy2 = evaluation(model, stegos, [1]*len(stego_files), 500, progress=True) if len(stego_files) > 0 else (0, 0)
-  total_accuracy = (correct1 + correct2) / (len(cover_files)+len(stego_files))
-
-  if verbose:
+  if len(cover_files) > 0:
+    correct1, accuracy1 = evaluation(model, covers, [0]*len(cover_files), 500, progress=True)
     print(f'cover : correct {correct1} accuracy {accuracy1}')
+  else:
+    correct1, accuracy1 = 0, 0
+
+  if len(stego_files) > 0:
+    correct2, accuracy2 = evaluation(model, stegos, [1]*len(stego_files), 500, progress=True) if len(stego_files) > 0 else (0, 0)
     print(f'stego : correct {correct2} accuracy {accuracy2}')
+  else:
+    correct2, accuracy2 = 0, 0
+
+  total_accuracy = (correct1 + correct2) / (len(cover_files)+len(stego_files))
 
   return correct1 + correct2, total_accuracy
 
@@ -196,5 +202,5 @@ if __name__ == '__main__':
   cover_files, stego_files = utils.get_files_list(cover_path), utils.get_files_list(stego_path)
   cross_validation_train('wasdn', cover_files[:5000], stego_files[:5000], save_path='model_wasdn_local.pth')
   test(model='wasdn', model_path='model_wasdn_local.pth')
-  cross_validation_train('wasdn', cover_files[5000:], stego_files[5000:], save_path='model_wasdn_remote.pth')
-  test(model='wasdn', model_path='model_wasdn_remote.pth')
+#  cross_validation_train('wasdn', cover_files[5000:], stego_files[5000:], save_path='model_wasdn_remote.pth')
+#  test(model='wasdn', model_path='model_wasdn_remote.pth')
