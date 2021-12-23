@@ -97,20 +97,17 @@ def cross_validation_train(model, cover_files, stego_files, epochs=4, batch_size
   writer.flush()
   writer.close()
 
-def __depreacted_train(model='rhfcn', epochs = 3, batch_size=8, train_size=0.9, save_path=None, seed=None):
+def train(model, cover_files, stego_files, train_size=0.9, epochs=1, batch_size=10, save_path=None):
   """
   This method has been deprecated.
   """
-  cover_path, stego_path = config.get_paths(birate=320)
-
   writer = tensorboard.SummaryWriter(f'runs/train_{utils.get_time()}')
   device = utils.auto_select_device()
 
-  files = {'cover_files': utils.get_files_list(cover_path), 'stego_files': utils.get_files_list(stego_path)}
-  cover_len = len(files['cover_files'])
+  cover_len = len(cover_files)
   train_amount = int(cover_len * train_size)
 
-  train_cover_files, train_stego_files, valid_cover_files, valid_stego_files = files['cover_files'][:train_amount], files['stego_files'][:train_amount], files['cover_files'][train_amount:], files['stego_files'][train_amount:]
+  train_cover_files, train_stego_files, valid_cover_files, valid_stego_files = cover_files[:train_amount], stego_files[:train_amount], cover_files[train_amount:], stego_files[train_amount:]
   writer.add_text(f'Log', f'Files\' length:\n\ttrain-cover {len(train_cover_files)} train-stego {len(train_stego_files)}\n\tvalid-cover {len(valid_cover_files)} valid-stego {len(valid_stego_files)}', 0)
 
   train_covers = utils.transform(utils.text_read_batch(train_cover_files, progress=True))
@@ -127,7 +124,7 @@ def __depreacted_train(model='rhfcn', epochs = 3, batch_size=8, train_size=0.9, 
   optimizer = O.Adam(model.parameters(), lr=1e-3, betas=(0.9, 0.999), eps=1e-8)
   criterion = nn.CrossEntropyLoss().to(device)
   batches = train_amount // batch_size
-  valid_amount = len(files['cover_files']) - train_amount
+  valid_amount = len(cover_files) - train_amount
 
   valid_data = T.cat([valid_covers, valid_stegos])
   valid_labels = T.LongTensor([0] * valid_amount + [1] * valid_amount)
@@ -200,7 +197,5 @@ def test(model='rhfcn', model_path='model_rhfcn.pth', birate=320, verbose=True):
 if __name__ == '__main__':
   cover_path, stego_path = config.get_paths(birate=320)
   cover_files, stego_files = utils.get_files_list(cover_path), utils.get_files_list(stego_path)
-  cross_validation_train('wasdn', cover_files[:5000], stego_files[:5000], save_path='model_wasdn_local.pth')
-  test(model='wasdn', model_path='model_wasdn_local.pth')
-#  cross_validation_train('wasdn', cover_files[5000:], stego_files[5000:], save_path='model_wasdn_remote.pth')
-#  test(model='wasdn', model_path='model_wasdn_remote.pth')
+  train('rhfcn', cover_files[:5000], stego_files[:5000], save_path='model_rhfcn_local.pth')
+  test(model='rhfcn', model_path='model_rhfcn_local.pth')
