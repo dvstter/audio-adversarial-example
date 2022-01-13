@@ -12,7 +12,7 @@ def norm(array):
     result[i] /= _max[i]
   return result.reshape(array.shape)
 
-def multiple_gradients_value_guided_qmdct_modify(array, gradients, max_modifications, type='most', accuracy_direction='increase', neglect_sing=False, normalization=True):
+def multiple_gradients_value_guided_qmdct_modify(array, gradients, max_modifications, type='most', accuracy_direction='increase', neglect_sign=False, normalization=True):
   if isinstance(max_modifications, int):
     max_modifications = [max_modifications]
   if normalization:
