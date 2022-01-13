@@ -152,7 +152,7 @@ def text_write_batch(text_files_list, data, separator=','):
   write all data into text files.
 
   :param text_files_list: list, shape: [files_num]
-  :param data: ndarry, shape: [files_num, height, width]
+  :param data: ndarry, shape: [files_num, height, width, 1]
   :param separator: str
 
   :return:
