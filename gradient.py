@@ -80,9 +80,33 @@ class DataGradientCalculator:
 
     return data_gradient(self._model, array, T.LongTensor(labels).to(self._device))
 
-def _save_gradient(model='rhfcn', model_path='model_rhfcn.pth', batch_size=100):
-#  cover_path, gradient_path = config.get_paths(birate=320, cover=True, stego=False, gradient=True)
-  cover_path, gradient_path = '/home/zhu/stego_analysis/500_320/', '/home/zhu/stego_analysis/500_320_gradient/'
+def _process_gradient(covers, grads):
+  non_linbit_points = np.logical_or(abs(covers)>2, covers==0)
+  non_used_grads_points = grads==.0
+  grads[np.logical_or(non_linbit_points, non_used_grads_points)] = 100 # modified first, for sorting
+  num_array, height, width, _ = grads.shape
+  flattened_gradient = grads.reshape(num_array, -1)
+  flattened_index = np.argsort(abs(flattened_gradient), 1)
+  for i in range(num_array):
+    flattened_gradient[i, flattened_index[i]] = np.arange(1, height*width+1)
+  gradient = flattened_gradient.reshape(num_array, height, width, 1)
+  # to save storage, but in next procedure, program should be aware of this problem
+  gradient[non_linbit_points] = 0
+  # due to the effective matrix is only 200*450, so we should set the rest elements big enough to avoid usage in latter steps
+  gradient[non_used_grads_points] = 2000000
+  return gradient
+
+def _save_gradient(model, model_path, cover_path, gradient_path, label, batch_size=100):
+  """
+  save gradients for covers.
+
+  :param model: str, 'rhfcn' or 'wasdn'
+  :param model_path: str
+  :param cover_path: str
+  :param label: int, 0 or 1
+  :param gradient_path: str, ended with '/'
+  :param batch_size: int, batch size for calculation procedure
+  """
   cover_files = utils.get_files_list(cover_path)
   gradient_files = [gradient_path + x.split('/')[-1] for x in cover_files]
   len_files = len(cover_files)
@@ -94,31 +118,14 @@ def _save_gradient(model='rhfcn', model_path='model_rhfcn.pth', batch_size=100):
 
   print('loading cover files over.')
 
-  # 查看梯度的各项数据，从而确定截断点
-  def process_grads(_start_idx, _grads):
-    n = _grads.shape[0]
-    for i in range(n):
-      _max, _min, _abs_min, _mean, _abs_mean = _grads[i].max(), _grads[i].min(), abs(_grads[i]).min(), _grads[i].sum() / (200*450), abs(_grads[i]).sum() / (200*450)
-      print(f'{_start_idx + i} {_max} {_min} {_abs_min} {_mean} {_abs_mean}')
-      return _max, _min, _abs_min, _mean, _abs_mean
-
-#  _1, _2, _3, _4, _5 = [], [], [], [], []
-
   for i in trange(len_files // batch_size):
     start_idx = i * batch_size
     end_idx = start_idx + batch_size
 
     array = cover_array[start_idx:end_idx]
-    _, gradient = gradient_calculator.gradient(array, [1] * batch_size)
-#    _max, _min, _abs_min, _mean, _abs_mean = process_grads(start_idx, gradient)
-#    _1.append(_max), _2.append(_min), _3.append(_abs_min), _4.append(_mean), _5.append(_abs_mean)
-
-#  print('total:')
-#  print(max(_1), min(_2), min(_2), sum(_4)/(len_files // batch_size)), sum(_5)/(len_files // batch_size)
-
-    _grads = np.array(np.sign(gradient), dtype=np.int)
-    _grads[abs(gradient) < 1e-9] = 0 # 1e-9的截断点是经验值
-    utils.text_write_batch(gradient_files[start_idx:end_idx], _grads)
+    _, gradient = gradient_calculator.gradient(array, [label] * batch_size)
+    gradient = _process_gradient(cover_array[start_idx:end_idx], gradient)
+    utils.text_write_batch(gradient_files[start_idx:end_idx], gradient)
 
 if __name__ == '__main__':
-  _save_gradient()
+  _save_gradient('wasdn', 'model_wasdn_local.pth', '/home/zhu/stego_analysis/500_320/', '/home/zhu/stego_analysis/500_320_gradient/', 0)
