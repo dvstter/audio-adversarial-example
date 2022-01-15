@@ -94,6 +94,7 @@ def _process_gradient(covers, grads):
   gradient[non_linbit_points] = 0
   # due to the effective matrix is only 200*450, so we should set the rest elements big enough to avoid usage in latter steps
   gradient[non_used_grads_points] = 2000000
+  gradient = np.array(gradient, dtype=np.int)
   return gradient
 
 def _save_gradient(model, model_path, cover_path, gradient_path, label, batch_size=100):
