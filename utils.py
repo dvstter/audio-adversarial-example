@@ -199,3 +199,13 @@ def load_model(model, path, device=None):
   model.eval()
   return model
 
+def convert_text_format(filedir, height, width, separator='\t', replace_files=True):
+  files = get_files_list(filedir)
+  outfiles = [x+'.modif' for x in files]
+  array = text_read_batch(files, height=height, width=width, progress=True, separator=separator)
+  newarray = np.zeros([500, 200, 576, 1], np.int)
+  newarray[:, :, :450, :] = array
+  text_write_batch(outfiles, newarray)
+  if replace_files:
+    [os.remove(x) for x in files]
+    [os.rename(outfiles[i], files[i]) for i in range(len(files))]
