@@ -2,6 +2,8 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
+import torch as T
+import utils, tqdm, gradient
 
 def norm(array):
   result = np.array(array, dtype=np.float)
@@ -147,5 +149,22 @@ def fgsm_qmdct_modify(array, gradient, epsilons=[0.01, -0.01, 0.05, -0.05, 0.1, 
 
   return result, sorted_keys
 
+def _save_modified_array(model, model_path, cover_path, modified_array_save_path, max_modification, batch_size=100):
+  model = utils.load_model(model, model_path)
+  files = utils.get_files_list(cover_path)
+  device = utils.auto_select_device()
+  cover_array = utils.text_read_batch(files, progress=True)
+  batches = len(files) // batch_size
+  gradient_files = [modified_array_save_path + x.split('/')[-1] for x in files]
+  for i in tqdm.trange(batches):
+    start = i * batch_size
+    end = start + batch_size
+
+    _, grads = gradient.data_gradient(model, cover_array[start:end], T.LongTensor([0] * batch_size).to(device))
+    modified_array = gradient_value_guided_qmdct_modify(cover_array[start:end], grads,
+                                                                       max_modifications=max_modification, type='least',
+                                                                       neglect_sign=True)
+    utils.text_write_batch(gradient_files[start:end], modified_array[max_modification])
+
 if __name__ == '__main__':
-  pass
+  _save_modified_array('wasdn', 'model_wasdn_local.pth', '/home/zhu/stego_analysis/500_320/', '/home/zhu/stego_analysis/500_320_qmdct_modified/', 12000)
