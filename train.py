@@ -194,6 +194,26 @@ def test(model='rhfcn', model_path='model_rhfcn.pth', birate=320, verbose=True):
 
   return correct1 + correct2, total_accuracy
 
+def benchmark(model, model_path, label, test_path, save_path):
+  device = utils.auto_select_device()
+  model = utils.load_model(model, model_path, device)
+  model.eval()
+  batch_size = 100
+  files = utils.get_files_list(test_path)
+  array = utils.text_read_batch(files, progress=True, separator='\t')
+  array = utils.transform(array, device)
+  batches = len(files) // batch_size
+  result = []
+
+  for i in tqdm.trange(batches):
+    data = array[i*batch_size:(i+1)*batch_size]
+    labels = [label] * batch_size
+    probs = model.get_probabilities(data, labels)
+    result += list(probs)
+
+  with open(save_path, 'wt') as f:
+    f.write('\n'.join([str(x) for x in result]))
+
 if __name__ == '__main__':
   cover_path, stego_path = config.get_paths(birate=320)
   cover_files, stego_files = utils.get_files_list(cover_path), utils.get_files_list(stego_path)
