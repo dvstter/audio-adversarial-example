@@ -6,6 +6,7 @@ import torch as T
 import torch.utils.tensorboard as tensorboard
 import torch.nn as nn
 import torch.optim as O
+import numpy as np
 import tqdm
 import config
 from dataset import PairDataset, ToTensor
@@ -200,7 +201,7 @@ def benchmark(model, model_path, label, test_path, save_path):
   model.eval()
   batch_size = 100
   files = utils.get_files_list(test_path)
-  array = utils.text_read_batch(files, progress=True, separator='\t')
+  array = utils.text_read_batch(files, progress=True)
   array = utils.transform(array, device)
   batches = len(files) // batch_size
   result = []
@@ -210,6 +211,8 @@ def benchmark(model, model_path, label, test_path, save_path):
     labels = [label] * batch_size
     probs = model.get_probabilities(data, labels)
     result += list(probs)
+
+  result.append((np.array(result)>0.5).sum())
 
   with open(save_path, 'wt') as f:
     f.write('\n'.join([str(x) for x in result]))
