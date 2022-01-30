@@ -9,7 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import config
 
-def data_gradient(model, array, tensor_labels, clip=None):
+def data_gradient(model, array, tensor_labels, clip=None, device=None):
   """
   calculate data gradient directly.
 
@@ -17,13 +17,14 @@ def data_gradient(model, array, tensor_labels, clip=None):
   :param array: ndarry, [batch, height, width, 1]
   :param tensor_labels: torch.tensor, [batch], must be in the same device with array
   :param clip: float, clip too small gradient to 0.0
+  :param device: str or None, if None, this will choose device automatically
 
   :return:
     probs: ndarray, [batch], original probability for corresponding label
     gradient: ndarray, [batch, height, widht, 1], same with array
   """
 
-  tensor = utils.transform(array)
+  tensor = utils.transform(array, device)
   tensor.requires_grad = True
   output = model(tensor)
   loss = F.cross_entropy(output, tensor_labels)
@@ -78,23 +79,25 @@ class DataGradientCalculator:
       gradient: ndarray, shape matches with array
     """
 
-    return data_gradient(self._model, array, T.LongTensor(labels).to(self._device))
+    return data_gradient(self._model, array, T.LongTensor(labels).to(self._device), device=self._device)
 
 def _process_gradient(covers, grads):
   non_linbit_points = np.logical_or(abs(covers)>2, covers==0)
   non_used_grads_points = grads==.0
-  grads[np.logical_or(non_linbit_points, non_used_grads_points)] = 100 # modified first, for sorting
-  num_array, height, width, _ = grads.shape
-  flattened_gradient = grads.reshape(num_array, -1)
-  flattened_index = np.argsort(abs(flattened_gradient), 1)
-  for i in range(num_array):
-    flattened_gradient[i, flattened_index[i]] = np.arange(1, height*width+1)
-  gradient = flattened_gradient.reshape(num_array, height, width, 1)
-  # to save storage, but in next procedure, program should be aware of this problem
-  gradient[non_linbit_points] = 0
+#  grads[np.logical_or(non_linbit_points, non_used_grads_points)] = 100 # modified first, for sorting
+#  num_array, height, width, _ = grads.shape
+#  flattened_gradient = grads.reshape(num_array, -1)
+#  flattened_index = np.argsort(abs(flattened_gradient), 1)
+#  for i in range(num_array):
+#    flattened_gradient[i, flattened_index[i]] = np.arange(1, height*width+1)
+#  gradient = flattened_gradient.reshape(num_array, height, width, 1)
+#  # to save storage, but in next procedure, program should be aware of this problem
+#  gradient[non_linbit_points] = 0
   # due to the effective matrix is only 200*450, so we should set the rest elements big enough to avoid usage in latter steps
-  gradient[non_used_grads_points] = 2000000
-  gradient = np.array(gradient, dtype=np.int)
+#  gradient[non_used_grads_points] = 2000000
+#  gradient = np.array(gradient, dtype=np.int)
+  gradient = grads
+  grads[np.logical_or(non_linbit_points, non_used_grads_points)] = .0
   return gradient
 
 def _save_gradient(model, model_path, cover_path, gradient_path, label, batch_size=100):
@@ -111,10 +114,11 @@ def _save_gradient(model, model_path, cover_path, gradient_path, label, batch_si
   cover_files = utils.get_files_list(cover_path)
   gradient_files = [gradient_path + x.split('/')[-1] for x in cover_files]
   len_files = len(cover_files)
+  device = utils.auto_select_device()
 
   print(f'read files from {cover_path}, len {len_files}, write gradient files to {gradient_path}.')
 
-  gradient_calculator = DataGradientCalculator(model, model_path)
+  gradient_calculator = DataGradientCalculator(model, model_path, device)
   cover_array = utils.text_read_batch(cover_files, progress=True)
 
   print('loading cover files over.')
@@ -123,10 +127,10 @@ def _save_gradient(model, model_path, cover_path, gradient_path, label, batch_si
     start_idx = i * batch_size
     end_idx = start_idx + batch_size
 
-    array = cover_array[start_idx:end_idx]
-    _, gradient = gradient_calculator.gradient(array, [label] * batch_size)
+    _, gradient = gradient_calculator.gradient(cover_array[start_idx:end_idx], [label] * batch_size)
     gradient = _process_gradient(cover_array[start_idx:end_idx], gradient)
     utils.text_write_batch(gradient_files[start_idx:end_idx], gradient)
 
 if __name__ == '__main__':
-  _save_gradient('wasdn', 'model_wasdn_local.pth', '/home/zhu/stego_analysis/500_320/', '/home/zhu/stego_analysis/500_320_gradient/', 0)
+  cover_path, gradient_path = config.get_paths(320, stego=False, gradient=True)
+  _save_gradient('wasdn', 'model_wasdn_local.pth', cover_path, gradient_path, 0)
