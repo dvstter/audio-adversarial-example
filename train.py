@@ -131,30 +131,30 @@ def train(model, cover_files, stego_files, train_size=0.9, epochs=1, batch_size=
   valid_labels = T.LongTensor([0] * valid_amount + [1] * valid_amount)
 
   try:
-    with tqdm.tqdm(total=epochs * batches) as pbar:
-      for epoch in range(epochs):
-        for i in range(batches):
-          if i % 10 == 0:
-            correct, accuracy = evaluation(model, valid_data, valid_labels, valid_amount)
-            writer.add_scalar('Accuracy', accuracy, epoch * batches + i)
+    pbar = tqdm.tqdm(total=epochs * batches)
+    for epoch in range(epochs):
+      for i in range(batches):
+        if i % 10 == 0:
+          correct, accuracy = evaluation(model, valid_data, valid_labels, valid_amount)
+          writer.add_scalar('Accuracy', accuracy, epoch * batches + i)
 
 #            if accuracy > 0.92:
 #              print('accuracy is higher than .92, exit early.')
 #              raise NestedBreakException
 
-          start_idx = i * batch_size
-          end_idx = start_idx + batch_size
+        start_idx = i * batch_size
+        end_idx = start_idx + batch_size
 
-          train_data = T.cat([train_covers[start_idx:end_idx], train_stegos[start_idx: end_idx]])
-          train_labels = T.LongTensor([0]*batch_size+[1]*batch_size).to(device)
+        train_data = T.cat([train_covers[start_idx:end_idx], train_stegos[start_idx: end_idx]])
+        train_labels = T.LongTensor([0]*batch_size+[1]*batch_size).to(device)
 
-          loss = criterion(model(train_data), train_labels)
-          optimizer.zero_grad()
-          loss.backward()
-          optimizer.step()
+        loss = criterion(model(train_data), train_labels)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
 
-          writer.add_scalar('Loss', loss.cpu().detach().item(), epoch * batches + i)
-          pbar.update(1)
+        writer.add_scalar('Loss', loss.cpu().detach().item(), epoch * batches + i)
+        pbar.update(1)
   except NestedBreakException:
     pass
 
@@ -195,7 +195,7 @@ def test(model='rhfcn', model_path='model_rhfcn.pth', birate=320, verbose=True):
 
   return correct1 + correct2, total_accuracy
 
-def benchmark(model, model_path, label, test_path, save_path):
+def benchmark(model, model_path, label, test_path, save_path=None):
   device = utils.auto_select_device()
   model = utils.load_model(model, model_path, device)
   model.eval()
@@ -214,8 +214,11 @@ def benchmark(model, model_path, label, test_path, save_path):
 
   result.append((np.array(result)>0.5).sum())
 
-  with open(save_path, 'wt') as f:
-    f.write('\n'.join([str(x) for x in result]))
+  if not save_path:
+    with open(save_path, 'wt') as f:
+      f.write('\n'.join([str(x) for x in result]))
+
+  return result
 
 if __name__ == '__main__':
   cover_path, stego_path = config.get_paths(birate=320)

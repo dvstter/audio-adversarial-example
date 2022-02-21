@@ -4,6 +4,7 @@
 import getpass
 import os
 
+'''
 def get_paths(birate='320', cover=True, stego=True, gradient=False):
   if not birate in ['128', '320', 128, 320, 'test']:
     raise ValueError('type must be 128, 320 or test')
@@ -33,3 +34,23 @@ def get_paths(birate='320', cover=True, stego=True, gradient=False):
     rets.append(gradient_path)
 
   return rets
+'''
+
+def get_paths(train_or_test, stego_algos, embed_rates):
+  """
+  shortcuts to get paths
+
+  @param train_or_test: str, 'train' or 'test'
+  @param stego_algos: str, 'ags' or 'jed'
+  @param embed_rates: list[int]
+  """
+  root_path = '/home/zhu/stego_analysis/'
+  if train_or_test is 'train':
+    root_path += 'train_data/'
+  elif train_or_test is 'test':
+    root_path += 'test_data/'
+
+  cover_path = root_path + 'Cover/320'
+  stego_paths = [root_path + 'Stego/' + stego_algos + '/w' + str(x) for x in embed_rates]
+
+  return cover_path, stego_paths
