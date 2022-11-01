@@ -9,11 +9,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 import config
 
-def data_gradient(model, array, tensor_labels, clip=None, device=None):
+def data_gradient(torch_model, array, tensor_labels, clip=None, device=None):
   """
   calculate data gradient directly.
 
-  :param model: RHFCN or WASDN model
+  :param torch_model: RHFCN or WASDN model
   :param array: ndarry, [batch, height, width, 1]
   :param tensor_labels: torch.tensor, [batch], must be in the same device with array
   :param clip: float, clip too small gradient to 0.0
@@ -26,9 +26,9 @@ def data_gradient(model, array, tensor_labels, clip=None, device=None):
 
   tensor = utils.transform(array, device)
   tensor.requires_grad = True
-  output = model(tensor)
+  output = torch_model(tensor)
   loss = F.cross_entropy(output, tensor_labels)
-  model.zero_grad()
+  torch_model.zero_grad()
   loss.backward()
 
   index = tensor_labels.unsqueeze(1)
@@ -44,11 +44,11 @@ def data_gradient(model, array, tensor_labels, clip=None, device=None):
     gradient[abs(gradient) < float(clip)] = 0.0
   return probs, gradient
 
-def second_order_data_gradient(model, array, tensor_labels, clip=None):
+def second_order_data_gradient(torch_model, array, tensor_labels, clip=None):
   """
   calculate the first-order and second-order gradient directly.
 
-  :param model: RHFCN or WASDN model
+  :param torch_model: RHFCN or WASDN model
   :param array: ndarray, [batch, height, width, 1]
   :param tensor_labels: torch.tensor, [batch], must be in the same device with model
   :return:
@@ -56,8 +56,8 @@ def second_order_data_gradient(model, array, tensor_labels, clip=None):
     gradient: ndarray, [batch, height, width, 1] which is totally same as param array
     second_gradient: ndarray, second-order gradient
   """
-  probs, gradient = data_gradient(model, array, tensor_labels, clip)
-  _, second_gradient = data_gradient(model, gradient, tensor_labels, clip)
+  probs, gradient = data_gradient(torch_model, array, tensor_labels, clip)
+  _, second_gradient = data_gradient(torch_model, gradient, tensor_labels, clip)
   return probs, gradient, second_gradient
 
 class DataGradientCalculator:

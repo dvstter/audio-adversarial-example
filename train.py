@@ -14,11 +14,11 @@ from dataset import PairDataset, ToTensor
 class NestedBreakException(Exception):
   pass
 
-def evaluation(model, data, labels, batch_size=500, progress=False):
+def evaluation(torch_model, data, labels, batch_size=500, progress=False):
   """
   Evaluate the model
 
-  :param model: nn.Module
+  :param torch_model: nn.Module
   :param data: tensor
   :param labels: tensor, list or ndarray
   :param batch_size: int, to avoid gpu overload
@@ -41,9 +41,9 @@ def evaluation(model, data, labels, batch_size=500, progress=False):
     batch_data = data[start_idx:end_idx]
     batch_labels = labels[start_idx:end_idx]
     with T.no_grad():
-      model.eval()
-      _, predictions = T.max(model(batch_data).cpu(), axis=1)
-    model.train()
+      torch_model.eval()
+      _, predictions = T.max(torch_model(batch_data).cpu(), axis=1)
+    torch_model.train()
     correct += (predictions == batch_labels).sum().item()
 
   return correct, correct / num_data

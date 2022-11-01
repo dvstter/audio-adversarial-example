@@ -5,9 +5,9 @@ import torch as T
 import tqdm
 
 import gradient
-import utils as utils
-import config as config
-import steganography as steganography
+import utils
+import config
+import steganography
 
 def _load_everything(model, model_path):
   cover_path = '/home/zhu/stego_analysis/500_320'

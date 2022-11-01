@@ -176,14 +176,14 @@ def transform(array, device=None):
   tensor = tensor[:, :, :200, :450]
   return tensor.to(device)
 
-def save_model(model, path=None):
+def save_model(torch_model, path=None):
   if not path:
     path = f'model_{get_time()}.pth'
-  T.save(model.state_dict(), path)
+  T.save(torch_model.state_dict(), path)
   print(f'Saved model to {path}')
 
 from network import RHFCN, WASDN
-def load_model(model, path, device=None):
+def load_model(model, model_path, device=None):
   if not device:
     device = auto_select_device()
 
@@ -194,7 +194,7 @@ def load_model(model, path, device=None):
   else:
     raise ValueError('load_modle\' parameter model should only be rhfcn or wasdn.')
 
-  model.load_state_dict(T.load(path))
+  model.load_state_dict(T.load(model_path))
   model = model.to(device)
   model.eval()
   return model
