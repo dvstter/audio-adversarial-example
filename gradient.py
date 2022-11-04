@@ -31,7 +31,7 @@ def data_gradient(torch_model, array, tensor_labels, clip=None, device=None):
   torch_model.zero_grad()
   loss.backward()
 
-  index = tensor_labels.unsqueeze(1)
+  index = tensor_labels.unsqueeze(1).cpu()
   probs = F.softmax(output, dim=1).cpu()
   probs = T.gather(probs, 1, index).squeeze().detach().numpy()
 
@@ -84,18 +84,6 @@ class DataGradientCalculator:
 def _process_gradient(covers, grads):
   non_linbit_points = np.logical_or(abs(covers)>2, covers==0)
   non_used_grads_points = grads==.0
-#  grads[np.logical_or(non_linbit_points, non_used_grads_points)] = 100 # modified first, for sorting
-#  num_array, height, width, _ = grads.shape
-#  flattened_gradient = grads.reshape(num_array, -1)
-#  flattened_index = np.argsort(abs(flattened_gradient), 1)
-#  for i in range(num_array):
-#    flattened_gradient[i, flattened_index[i]] = np.arange(1, height*width+1)
-#  gradient = flattened_gradient.reshape(num_array, height, width, 1)
-#  # to save storage, but in next procedure, program should be aware of this problem
-#  gradient[non_linbit_points] = 0
-  # due to the effective matrix is only 200*450, so we should set the rest elements big enough to avoid usage in latter steps
-#  gradient[non_used_grads_points] = 2000000
-#  gradient = np.array(gradient, dtype=np.int)
   gradient = grads
   grads[np.logical_or(non_linbit_points, non_used_grads_points)] = .0
   return gradient
