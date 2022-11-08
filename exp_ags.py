@@ -8,6 +8,8 @@ import gradient
 import utils
 import config
 import steganography
+import os
+import numpy as np
 
 def _load_everything(model, model_path):
   cover_path = '/home/zhu/stego_analysis/500_320'
@@ -91,39 +93,34 @@ def test_gradient_sign_guided_qmdct_modify(model='rhfcn', model_path='model_rhfc
       f.write('{},{},{}\n'.format(result['ori'][i], result['mod'][i], result['modifications'][i]))
   print(f'file saved to {save_path}')
 
-def test_fgsm_qmdct_modify(model='rhfcn', model_path='model_rhfcn.pth'):
-  model, device, cover_array, batches, batch_size, len_files = _load_everything(model, model_path)
+def generate_and_save_best_stego_files(domain='small', max_modification=12000):
+  """
+  according to the tests, generate and save the best performance stego files
+  """
+  device = utils.auto_select_device()
+  model = utils.load_model('rhfcn', 'model_rhfcn_local.pth')
+  batch_size = 100
+  cover_path, stego_path= config.get_paths('train', 'ags-'+domain, str(max_modification))
+  cover_files = utils.get_files_list(cover_path)[5000:]
+  if not os.path.exists(stego_path):
+    os.makedirs(stego_path)
+  stego_files = [cf.split('/')[-1] for cf in cover_files]
+  stego_files = [os.path.join(stego_path, cf) for cf in stego_files]
 
-  # test modify stego
-  cover_array = utils.text_read_batch(utils.get_files_list(config.get_paths(birate=320)[1])[:500])
+  for i_batch in tqdm.trange(0, 5000, batch_size):
+    array_cover = utils.text_read_batch(cover_files[i_batch:i_batch+batch_size])
+    _, grads = gradient.data_gradient(model, array_cover, T.LongTensor([0]*batch_size).to(device), device=device)
+    array_stego = steganography.multiple_gradients_value_guided_qmdct_modify(array_cover, grads, [max_modification], 'most', domain=domain, neglect_sign=True, normalization=False)[max_modification]
+    steganography.assert_modify_correct(array_cover, array_stego, domain)
 
-
-  result = {'original': []}
-
-  for i in tqdm.trange(batches):
-    start = i * batch_size
-    end = start + batch_size
-
-    original_probs, grads = gradient.data_gradient(model, cover_array[start:end], T.LongTensor([1] * batch_size).to(device))
-    modified_array, sorted_keys = steganography.fgsm_qmdct_modify(cover_array[start:end], grads)
-    result['original'] += list(original_probs)
-
-    for key in sorted_keys:
-      modified_probs = list(model.get_probabilities(utils.transform(modified_array[key]), [0] * batch_size))
-      if key not in result.keys():
-        result[key] = modified_probs
-      else:
-        result[key] += modified_probs
-
-  with open('stego_fgsm_qmdct_modify.csv', 'wt') as f:
-    f.write('original_prob,' + ','.join(sorted_keys) + '\n')
-    for i in range(len_files):
-      s = str(result['original'][i]) + ',' + ','.join(
-        [str(result[key][i]) for key in sorted_keys]) + '\n'
-      f.write(s)
-
-  print('saved results!')
-
+#    print(f'---------total available modifications for {i_batch}->{i_batch+batch_size}-----------------')
+#    if domain == 'small':
+#      print(list(np.logical_and(array_cover!=0, (abs(array_cover)<=2)).reshape(batch_size, -1).sum(axis=1)))
+#    else:
+#      print(list((abs(array_cover) > 2).reshape(batch_size, -1).sum(axis=1)))
+#    print(f'---------actual modifications for {i_batch}->{i_batch+batch_size}-----------------')
+#    print(list((array_cover!=array_stego).reshape(batch_size, -1).sum(axis=1)))
+    utils.text_write_batch(stego_files[i_batch:i_batch+batch_size], array_stego)
 
 if __name__ == '__main__':
 #  test_gradient_value_guided_qmdct_modify(model='rhfcn', model_path='model_rhfcn.pth', save_path='rhfcn_most.csv', gradient_prefer_type='most')
@@ -133,4 +130,8 @@ if __name__ == '__main__':
 #  test_fgsm_qmdct_modify()
 #  test_gradient_value_guided_qmdct_modify('wasdn', 'model_wasdn.pth', neglect_sign=True, save_path='wasdn_neglect.csv')
 #  test_gradient_value_guided_qmdct_modify('wasdn', 'model_wasdn.pth', neglect_sign=False, save_path='wasdn_not_neglect.csv')
-  test_different_models_gradient_value_guided_qmdct_modify('wasdn', 'wasdn', 'model_wasdn_local.pth', 'model_wasdn_remote.pth', save_path='two_wasdn.csv')
+#  test_different_models_gradient_value_guided_qmdct_modify('wasdn', 'wasdn', 'model_wasdn_local.pth', 'model_wasdn_remote.pth', save_path='two_wasdn.csv')
+#  [generate_and_save_best_stego_files(max_modification=mm) for mm in [8000, 12000, 20000, 30000]]
+#  [generate_and_save_best_stego_files(domain='big', max_modification=mm) for mm in [8000, 12000, 20000, 30000]]
+#  generate_and_save_best_stego_files(domain='small', max_modification=30000)
+  generate_and_save_best_stego_files(domain='big', max_modification=30000)
