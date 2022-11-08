@@ -14,24 +14,53 @@ def norm(array):
     result[i] /= _max[i]
   return result.reshape(array.shape)
 
-def multiple_gradients_value_guided_qmdct_modify(array, gradients, max_modifications, type='most', accuracy_direction='increase', neglect_sign=False, normalization=True):
+def assert_modify_correct(cover, stego, domain='small'):
+  """
+  verify cover is correctly converted to stego
+
+  :param cover: ndarray, [batch, height, width, 1]
+  :param stego: ndarry, [batch, height, width, 1]
+  :param domain: str, 'big' or 'small'
+  """
+  if domain == 'small':
+    assert (abs(cover[cover != stego]) > 2).reshape(-1).sum() == 0
+  elif domain == 'big':
+    assert (abs(cover[cover != stego]) <= 2).reshape(-1).sum() == 0
+  temp = np.array(cover)
+  temp[:, :200, :450] = stego[:, :200, :450]
+  assert (temp!=stego).reshape(-1).sum() == 0
+
+def multiple_gradients_value_guided_qmdct_modify(array, gradients, max_modifications, type='most', domain='small', accuracy_direction='increase', neglect_sign=False, normalization=True, gradients_sum_up_guide=False):
+  """
+  use gradient value to guide qmdct modify with multiple max_modifications
+
+  :param array: ndarray, [batch, height, width, 1]
+  :param gradients: ndarray, same size with array
+  :param max_modifications: list[int, ...]
+  :param type: str, 'most' or 'least'
+  :param domain: str, 'small' or 'big'
+  :param accuracy_direction: str, 'increase' or 'decrease'
+  :param neglect_sign: bool, neglect gradients' sign or not
+  :param normalization: bool, normalize gradients according to the batch dimension
+  :param gradients_sum_up_guide: bool, default False, sum up all gradients to generate one generalized gradient to guide all the procedures
+
+  :return:
+    result: dict, {max_modification: ndarray}
+  """
   if isinstance(max_modifications, int):
     max_modifications = [max_modifications]
   if normalization:
     gradients = [norm(grads) for grads in gradients]
-  grad = sum(gradients) / len(gradients)
-  if type == 'most':
-    return most_value_based_modify(array, grad, max_modifications, accuracy_direction)
-  elif type == 'least':
-    return least_value_based_modify(array, grad, max_modifications, accuracy_direction, neglect_sign)
+  if gradients_sum_up_guide:
+    grad = sum(gradients) / len(gradients)
+    gradients[:,] = grad
 
-def gradient_value_guided_qmdct_modify(array, gradient, max_modifications, type='most', accuracy_direction='increase', neglect_sign=False):
-  if isinstance(max_modifications, int):
-    max_modifications = [max_modifications]
+  assert (type in ['most', 'least']) and (domain in ['small', 'big'] and (accuracy_direction in ['increase', 'decrease']))
+
   if type == 'most':
-    return most_value_based_modify(array, gradient, max_modifications, accuracy_direction)
-  elif type == 'least':
-    return least_value_based_modify(array, gradient, max_modifications, accuracy_direction, neglect_sign)
+    return most_value_based_modify(array, gradients, domain, max_modifications, accuracy_direction)
+  else:
+    return least_value_based_modify(array, gradients, domain, max_modifications, accuracy_direction, neglect_sign)
 
 def _preprocess(array, gradient, accuracy_direction='increase'):
   array = np.array(array, dtype=np.float)
@@ -43,46 +72,62 @@ def _preprocess(array, gradient, accuracy_direction='increase'):
 
   return array, gradient
 
-def most_value_based_modify(array, gradient, max_modifications, accuracy_direction='increase'):
+def most_value_based_modify(array, gradient, domain, max_modifications, accuracy_direction='increase'):
+  """
+  notice that modify big value domain is not supported now
+  """
   array, gradient = _preprocess(array, gradient, accuracy_direction)
 
-  index = np.logical_not(np.logical_and(np.logical_and(abs(array)>0, abs(array) <= 2), np.sign(array) != np.sign(gradient)))
-  gradient[index] = .0
-  num_array, height, width, _ = gradient.shape
-  flattened_gradient = gradient.reshape(num_array, -1)
+  non_modify_region = np.logical_or(array==0, abs(array) > 2) if domain == 'small' else abs(array)<=2
+  # most value based modify must consider the sign direction
+  non_modify_region = np.logical_or(non_modify_region, np.sign(gradient) == np.sign(array))
+  gradient[non_modify_region] = .0
+  batch, height, width, _ = gradient.shape
+  flattened_gradient = gradient.reshape(batch, -1)
   flattened_index = np.flip(np.argsort(abs(flattened_gradient), 1), 1)
 
   result = {}
   for mm in max_modifications:
-    temp_array = np.array(array.reshape(num_array, -1))
-    for i in range(num_array):
+    temp_array = np.array(array.reshape(batch, -1))
+    for i in range(batch):
       flip_index = flattened_index[i, :mm]
       temp_array[i, flip_index] = -temp_array[i, flip_index]
 
-    result[mm] = temp_array.reshape(num_array, height, width, 1)
+    temp_array = temp_array.reshape(batch, height, width, 1)
+    temp_array[non_modify_region] = array[non_modify_region]
+    result[mm] = np.array(array, dtype=int)
+    result[mm][:, :200, :450] = temp_array[:, :200, :450]
   return result
 
-def least_value_based_modify(array, gradient, max_modifications, accuracy_direction='increase', neglect_sign=False):
+def least_value_based_modify(array, gradient, domain, max_modifications, accuracy_direction='increase', neglect_sign=False):
   array, gradient = _preprocess(array, gradient, accuracy_direction)
 
-  gradient[gradient == .0] = 100
-  gradient[np.logical_or(array==0, abs(array) > 2)] = 100
-  if neglect_sign is False:
+  gradient[gradient == .0] = 100 # avoid modify the region outside the 200*450 matrix
+  non_modify_region = np.logical_or(array==0, abs(array) > 2) if domain == 'small' else abs(array)<=2
+  gradient[non_modify_region] = 100
+  if not neglect_sign:
     gradient[np.sign(gradient)==np.sign(array)] = 100
-  num_array, height, width, _ = gradient.shape
-  flattened_gradient = gradient.reshape(num_array, -1)
+  batch, height, width, _ = gradient.shape
+  flattened_gradient = gradient.reshape(batch, -1)
   flattened_index = np.argsort(abs(flattened_gradient), 1)
 
   result = {}
   for mm in max_modifications:
-    temp_array = np.array(array.reshape(num_array, -1))
-    for i in range(num_array):
+    temp_array = np.array(array.reshape(batch, -1))
+    for i in range(batch):
       flip_index = flattened_index[i][:mm]
       temp_array[i, flip_index] = -temp_array[i, flip_index]
-    result[mm] = temp_array.reshape(num_array, height, width, 1)
+
+    temp_array = temp_array.reshape(batch, height, width, 1)
+    temp_array[non_modify_region] = array[non_modify_region]
+    result[mm] = np.array(array, dtype=int)
+    result[mm][:, :200, :450] = temp_array[:, :200, :450]
   return result
 
 def gradient_sign_guided_qmdct_modify(array, gradient, accuracy_direction='increase', method='symbol'):
+  """
+  there are some problem need to be fixed, so this method should not be used any longer
+  """
   array, gradient = _preprocess(array, gradient, accuracy_direction)
 
   if method not in ['linbit', 'symbol']:
@@ -109,80 +154,6 @@ def gradient_sign_guided_qmdct_modify(array, gradient, accuracy_direction='incre
     modifications += index.reshape(num_array, -1).sum(axis=1)
 
   return array, modifications
-
-def fgsm_qmdct_modify(array, gradient, epsilons=[0.01, -0.01, 0.05, -0.05, 0.1, -0.1, 0.5, -0.5, 1.0, -1.0, 2.0, -2.0], max_modifications=[800, 1000, 2000, 4000, 8000, 10000, 20000], accuracy_direction='increase'):
-  """
-  just for verifying, not using
-
-  :param array: ndarray
-  :param gradient: ndarray
-  :param epsilons: list of float
-  :param max_modifications: list of int
-  :param accuracy_direction: str, 'increase' or 'decrease'
-  """
-
-  array, gradient = _preprocess(array, gradient, accuracy_direction)
-
-  num_array, height, width, _ = gradient.shape
-  flattened_gradient = gradient.reshape(num_array, -1)
-  flattened_array = array.reshape(num_array, -1)
-
-  result = {}
-  sorted_keys = []
-  for type in ['most', 'least']:
-    if type == 'most':
-      flattened_index = np.argsort(abs(flattened_gradient), 1)
-      flattened_index = np.flip(flattened_index, 1)
-    elif type == 'least':
-      leave_out_zero_gradient = np.array(flattened_gradient)
-      leave_out_zero_gradient[leave_out_zero_gradient==.0] = 100
-      flattened_index = np.argsort(abs(leave_out_zero_gradient), 1)
-    for eps in epsilons:
-      for mm in max_modifications:
-        temp_index = flattened_index[:, :mm]
-        temp_array = np.array(flattened_array)
-        temp_key = f'{type}-{eps}-{mm}'
-        for i in range(num_array):
-          temp_array[i, temp_index[i]] += eps * np.sign(flattened_gradient[i, temp_index[i]])
-        result[temp_key] = temp_array.reshape(num_array, height, width, 1)
-        sorted_keys.append(temp_key)
-
-  return result, sorted_keys
-
-def _save_modified_array_from_gradients(cover_path, gradient_path, modified_array_save_path, max_modification, batch_size=100):
-  files = utils.get_files_list(cover_path)
-  cover_array = utils.text_read_batch(files, progress=True)
-
-  print('loading gradient from files directly')
-  gradient_array = utils.text_read_batch(utils.get_files_list(gradient_path), progress=True)
-
-  batches = len(files) // batch_size
-  gradient_files = [modified_array_save_path + x.split('/')[-1] for x in files]
-  for i in tqdm.trange(batches):
-    start = i * batch_size
-    end = start + batch_size
-
-    modified_array = gradient_value_guided_qmdct_modify(cover_array[start:end], gradient_array[start:end],
-                                                        max_modifications=max_modification, type='least',
-                                                        neglect_sign=True)
-    utils.text_write_batch(gradient_files[start:end], modified_array[max_modification])
-
-def _save_modified_array_from_model(model, model_path, cover_path, modified_array_save_path, max_modification, batch_size=100):
-  model = utils.load_model(model, model_path)
-  files = utils.get_files_list(cover_path)
-  device = utils.auto_select_device()
-  cover_array = utils.text_read_batch(files, progress=True)
-  batches = len(files) // batch_size
-  gradient_files = [modified_array_save_path + x.split('/')[-1] for x in files]
-  for i in tqdm.trange(batches):
-    start = i * batch_size
-    end = start + batch_size
-
-    _, grads = gradient.data_gradient(model, cover_array[start:end], T.LongTensor([0] * batch_size).to(device))
-    modified_array = gradient_value_guided_qmdct_modify(cover_array[start:end], grads,
-                                                                       max_modifications=max_modification, type='least',
-                                                                       neglect_sign=True)
-    utils.text_write_batch(gradient_files[start:end], modified_array[max_modification])
 
 if __name__ == '__main__':
   pass
