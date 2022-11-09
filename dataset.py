@@ -5,7 +5,7 @@ import utils
 import numpy as np
 
 class MultiStegoPairDataset:
-  def __init__(self, cover_path_or_files, stego_path_list_or_files_list, start_index=None, end_index=None, batch_size=None, device=None, progress=False, lazy=True):
+  def __init__(self, cover_path_or_files, stego_path_list_or_files_list, start_index=None, end_index=None, batch_size=None, progress=False, lazy=True):
     self._progress = progress
     self._data_loaded = not lazy
     if isinstance(cover_path_or_files, str):
@@ -25,6 +25,9 @@ class MultiStegoPairDataset:
       self._stego_data_list = [utils.text_read_batch(stego_files, progress=self._progress) for stego_files in self._stego_files_list]
 
     self._batch_size = batch_size if batch_size else len(self._cover_data)
+
+  def get_batch_size(self):
+    return self._batch_size
 
   def iterations(self):
     return self._len // self._batch_size
@@ -69,8 +72,8 @@ class MultiStegoPairDataset:
     return data, labels
 
 class PairDataset(MultiStegoPairDataset):
-  def __init__(self, cover_path_or_files, stego_path_or_files, start_index=None, end_index=None, batch_size=None, device=None, progress=False, lazy=True):
-    super(PairDataset, self).__init__(cover_path_or_files, [stego_path_or_files], start_index, end_index, batch_size, device, progress, lazy)
+  def __init__(self, cover_path_or_files, stego_path_or_files, start_index=None, end_index=None, batch_size=None, progress=False, lazy=True):
+    super(PairDataset, self).__init__(cover_path_or_files, [stego_path_or_files], start_index, end_index, batch_size, progress, lazy)
 
 class CrossValidationPairDataset(PairDataset):
   """

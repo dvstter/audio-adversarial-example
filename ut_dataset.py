@@ -13,8 +13,8 @@ def test_dataset():
   _, stego_path2 = config.get_paths('test', embed_rate='4')
   _, stego_path3 = config.get_paths('test', embed_rate='8')
 
-  cover_path2, stego_path4 = config.get_paths('train', stego_algos='ags-small', embed_rate='20000')
-  _, stego_path5 = config.get_paths('train', stego_algos='ags-big', embed_rate='20000')
+  cover_path2, stego_path4 = config.get_paths('train', stego_algo='ags-small', embed_rate='20000')
+  _, stego_path5 = config.get_paths('train', stego_algo='ags-big', embed_rate='20000')
   cover_files = utils.get_files_list(cover_path2)
 
   device = utils.auto_select_device()

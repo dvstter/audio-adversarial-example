@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import dataset
 import utils
 from network import RHFCN, WASDN
 import torch as T
@@ -9,46 +10,28 @@ import torch.optim as O
 import numpy as np
 import tqdm
 import config
-from dataset import PairDataset, ToTensor
+from dataset import PairDataset
 
 class NestedBreakException(Exception):
   pass
 
-def evaluation(torch_model, data, labels, batch_size=500, progress=False):
-  """
-  Evaluate the model
-
-  :param torch_model: nn.Module
-  :param data: tensor
-  :param labels: tensor, list or ndarray
-  :param batch_size: int, to avoid gpu overload
-  :param progress: bool, display tqdm progress bar or not
-
-  :return:
-    correct, accuracy
-  """
-
-  if not T.is_tensor(labels):
-    labels = T.LongTensor(labels)
-
-  num_data = data.shape[0]
-  batches = num_data // batch_size if batch_size <= num_data else 1
-  correct = 0
-  _range = tqdm.trange(batches) if progress else range(batches)
-  for i in _range:
-    start_idx = i * batch_size
-    end_idx = start_idx + batch_size
-    batch_data = data[start_idx:end_idx]
-    batch_labels = labels[start_idx:end_idx]
+def evaluation(torch_model, dataset, device, update_progress_hook=lambda: None):
+  correct = []
+  for data, labels in dataset:
+    data = utils.transform(data, device)
     with T.no_grad():
       torch_model.eval()
-      _, predictions = T.max(torch_model(batch_data).cpu(), axis=1)
+      _, predictions = T.max(torch_model(data).cpu(), axis=1)
     torch_model.train()
-    correct += (predictions == batch_labels).sum().item()
+    correct += list((predictions == T.LongTensor(labels)).numpy().astype(int))
+    update_progress_hook()
 
-  return correct, correct / num_data
+  return correct, sum(correct) / len(correct)
 
 def cross_validation_train(model, cover_files, stego_files, epochs=4, batch_size=10, save_path=None, smoothed_weight=0.3, exit_threhold=0.8):
+  """
+  should not be used any longer! because the PairDataset class is re-designed.
+  """
   writer = tensorboard.SummaryWriter(f'runs/train_{utils.get_time()}')
   device = utils.auto_select_device()
   dataset = PairDataset(cover_files, stego_files, folds=10, batch_size=batch_size, to_tensor=ToTensor(device))
@@ -98,63 +81,52 @@ def cross_validation_train(model, cover_files, stego_files, epochs=4, batch_size
   writer.flush()
   writer.close()
 
-def train(model, cover_files, stego_files, train_size=0.9, epochs=1, batch_size=10, save_path=None):
+def multi_stego_train(model, cover_files, stego_files_list, train_size=0.9, epochs=1, batch_size=20, save_path=None, device=None):
   """
-  This method has been deprecated.
+  use multiple stego files train model
+
+  :param model: str, 'rhfcn' or 'wasdn'
+  :param cover_files: list[str]
+  :param stego_files_list: list[list[str], ]
+  :param train_size: float, 0-1.0
+  :param epochs: int
+  :param batch_size: int
+  :param save_path: str
   """
   writer = tensorboard.SummaryWriter(f'runs/train_{utils.get_time()}')
-  device = utils.auto_select_device()
-
-  cover_len = len(cover_files)
-  train_amount = int(cover_len * train_size)
-
-  train_cover_files, train_stego_files, valid_cover_files, valid_stego_files = cover_files[:train_amount], stego_files[:train_amount], cover_files[train_amount:], stego_files[train_amount:]
-  writer.add_text(f'Log', f'Files\' length:\n\ttrain-cover {len(train_cover_files)} train-stego {len(train_stego_files)}\n\tvalid-cover {len(valid_cover_files)} valid-stego {len(valid_stego_files)}', 0)
-
-  train_covers = utils.transform(utils.text_read_batch(train_cover_files, progress=True))
-  train_stegos = utils.transform(utils.text_read_batch(train_stego_files, progress=True))
-  valid_covers = utils.transform(utils.text_read_batch(valid_cover_files, progress=True))
-  valid_stegos = utils.transform(utils.text_read_batch(valid_stego_files, progress=True))
-  writer.add_text(f'Log', f'train-covers shape {train_covers} train-stegos shape {train_stegos}\n\tvalid-covers shape {valid_covers} valid-stegos shape {valid_stegos}', 1)
-
+  device = device if device else utils.auto_select_device()
   if model == 'rhfcn':
     model = RHFCN().to(device)
   elif model == 'wasdn':
     model = WASDN().to(device)
 
+  files_len = len(cover_files)
+  train_len = int(files_len * train_size)
+  train_dataset = dataset.MultiStegoPairDataset(cover_files[:train_len], [s[:train_len] for s in stego_files_list], batch_size=batch_size)
+  valid_dataset = dataset.MultiStegoPairDataset(cover_files[train_len:], [s[train_len:] for s in stego_files_list], batch_size=batch_size)
   optimizer = O.Adam(model.parameters(), lr=1e-3, betas=(0.9, 0.999), eps=1e-8)
   criterion = nn.CrossEntropyLoss().to(device)
-  batches = train_amount // batch_size
-  valid_amount = len(cover_files) - train_amount
-
-  valid_data = T.cat([valid_covers, valid_stegos])
-  valid_labels = T.LongTensor([0] * valid_amount + [1] * valid_amount)
-
   try:
-    pbar = tqdm.tqdm(total=epochs * batches)
+    pbar = tqdm.tqdm(total=epochs * (train_dataset.iterations()+valid_dataset.iterations()))
+    update_progress_hook = lambda: pbar.update(1)
     for epoch in range(epochs):
-      for i in range(batches):
-        if i % 10 == 0:
-          correct, accuracy = evaluation(model, valid_data, valid_labels, valid_amount)
-          writer.add_scalar('Accuracy', accuracy, epoch * batches + i)
-
-#            if accuracy > 0.92:
-#              print('accuracy is higher than .92, exit early.')
-#              raise NestedBreakException
-
-        start_idx = i * batch_size
-        end_idx = start_idx + batch_size
-
-        train_data = T.cat([train_covers[start_idx:end_idx], train_stegos[start_idx: end_idx]])
-        train_labels = T.LongTensor([0]*batch_size+[1]*batch_size).to(device)
-
+      # train procedures for current epoch
+      train_dataset = iter(train_dataset)
+      for train_data, train_labels in train_dataset:
+        train_data = utils.transform(train_data, device)
+        train_labels = T.LongTensor(train_labels).to(device)
         loss = criterion(model(train_data), train_labels)
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+        writer.add_scalar('Loss', loss.cpu().detach().item())
+        update_progress_hook()
 
-        writer.add_scalar('Loss', loss.cpu().detach().item(), epoch * batches + i)
-        pbar.update(1)
+      # validation procedures for current epoch
+      valid_dataset = iter(valid_dataset)
+      _, accuracy = evaluation(model, valid_dataset, device, update_progress_hook)
+      writer.add_scalar('Acc', accuracy)
+
   except NestedBreakException:
     pass
 
@@ -163,65 +135,42 @@ def train(model, cover_files, stego_files, train_size=0.9, epochs=1, batch_size=
   writer.flush()
   writer.close()
 
-def test(model='rhfcn', model_path='model_rhfcn.pth', birate=320, verbose=True):
-  cover_path, stego_path = config.get_paths(birate=birate)
-  device = utils.auto_select_device()
-
-  cover_files, stego_files = utils.get_files_list(cover_path), utils.get_files_list(stego_path)
-  covers = utils.transform(utils.text_read_batch(cover_files, progress=True))
-  stegos = utils.transform(utils.text_read_batch(stego_files, progress=True))
-
-  if verbose:
-    print('files loaded.')
-    print(f'len cover files: {len(cover_files)} len stego files: {len(stego_files)}')
-    print(f'dimension covers: {covers.shape} dimension stegos: {stegos.shape}')
-    print(f'prepare loading model {model} from {model_path}')
-
+def test(model, model_path, cover_files, stego_files_list, detailed_result=None, device=None):
+  device = device if device else utils.auto_select_device()
   model = utils.load_model(model, model_path, device)
+  test_dataset = dataset.MultiStegoPairDataset(cover_files, stego_files_list, batch_size=10)
+  pbar = tqdm.tqdm(total=test_dataset.iterations())
+  correct, accuracy = evaluation(model, test_dataset, device, lambda: pbar.update(1))
+  if detailed_result:
+    dr_file = open(detailed_result, 'wt')
+    results_per_file = len(stego_files_list) + 1
+    for i_file in range(len(test_dataset)):
+      temp = ','.join([str(x) for x in correct[i_file*results_per_file:(i_file+1)*results_per_file]])
+      dr_file.write(f'{i_file+1},{temp}\n')
+    dr_file.write(f'total,{accuracy}\n')
 
-  if len(cover_files) > 0:
-    correct1, accuracy1 = evaluation(model, covers, [0]*len(cover_files), 500, progress=True)
-    print(f'cover : correct {correct1} accuracy {accuracy1}')
-  else:
-    correct1, accuracy1 = 0, 0
+  return correct, accuracy
 
-  if len(stego_files) > 0:
-    correct2, accuracy2 = evaluation(model, stegos, [1]*len(stego_files), 500, progress=True) if len(stego_files) > 0 else (0, 0)
-    print(f'stego : correct {correct2} accuracy {accuracy2}')
-  else:
-    correct2, accuracy2 = 0, 0
+# experiments
+def _exp_train_multi_stego_model():
+  cover_path, stego_paths = config.get_multi_stego_paths('train', ['jed', 'ags-small', 'ags-small', 'ags-big', 'ags-big'], [2, 8000, 20000, 8000, 20000])
+  cover_files = utils.get_files_list(cover_path)
+  stego_files_list = [utils.get_files_list(path) for path in stego_paths]
+  multi_stego_train('rhfcn', cover_files, stego_files_list,
+                    train_size=0.98,
+                    epochs=3,
+                    batch_size=10,
+                    save_path='multi_stego_rhfcn.pth')
 
-  total_accuracy = (correct1 + correct2) / (len(cover_files)+len(stego_files))
-
-  return correct1 + correct2, total_accuracy
-
-def benchmark(model, model_path, label, test_path, save_path=None):
-  device = utils.auto_select_device()
-  model = utils.load_model(model, model_path, device)
-  model.eval()
-  batch_size = 100
-  files = utils.get_files_list(test_path)
-  array = utils.text_read_batch(files, progress=True)
-  array = utils.transform(array, device)
-  batches = len(files) // batch_size
-  result = []
-
-  for i in tqdm.trange(batches):
-    data = array[i*batch_size:(i+1)*batch_size]
-    labels = [label] * batch_size
-    probs = model.get_probabilities(data, labels)
-    result += list(probs)
-
-  result.append((np.array(result)>0.5).sum())
-
-  if not save_path:
-    with open(save_path, 'wt') as f:
-      f.write('\n'.join([str(x) for x in result]))
-
-  return result
+def _exp_test_multi_stego_model():
+  cover_path, stego_paths = config.get_multi_stego_paths('train', ['jed', 'ags-small', 'ags-small', 'ags-big', 'ags-big'], [2, 8000, 20000, 8000, 20000])
+  cover_files = utils.get_files_list(cover_path)
+  stego_files_list = [utils.get_files_list(path) for path in stego_paths]
+  test('rhfcn', 'multi_stego_rhfcn.pth', cover_files, stego_files_list, 'train_dataset_result.csv')
+  cover_path, stego_paths = config.get_multi_stego_paths('test', ['jed']*5+['ags']*5, [2,4,6,8,10]*2)
+  cover_files = utils.get_files_list(cover_path)
+  stego_files_list = [utils.get_files_list(path) for path in stego_paths]
+  test('rhfcn', 'multi_stego_rhfcn.pth', cover_files, stego_files_list, 'test_dataset_result.csv')
 
 if __name__ == '__main__':
-  cover_path, stego_path = config.get_paths(birate=320)
-  cover_files, stego_files = utils.get_files_list(cover_path), utils.get_files_list(stego_path)
-  train('rhfcn', cover_files[:5000], stego_files[:5000], save_path='model_rhfcn_local.pth')
-  test(model='rhfcn', model_path='model_rhfcn_local.pth')
+  _exp_test_multi_stego_model()
